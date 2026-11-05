@@ -58,7 +58,11 @@ Click training is sampled classification: each observed click is positive and
 one popularity-ranked item not previously seen in that session is sampled as a
 candidate negative. The negative is not a confirmed non-click because no
 impression log exists. Features are computed from events strictly before the
-example. The final event of every session is held out for next-item evaluation.
+example. The evaluator holds out the final row after sorting by timestamp,
+session ID, and item ID. The click mirror timestamps events only at day
+granularity, so item ID breaks ties; the holdout is not the original
+chronological next click. Evaluation history uses timestamps strictly earlier
+than the target; for day-stamped click sessions that history is empty.
 
 ## Reproduced run
 
@@ -94,8 +98,10 @@ was `0.0`; fallback rate was `1.0` in this slice. This is a valid cold-start
 result, not hidden.
 
 The corrected evaluator writes an MLflow run per lambda and reports
-Recall@10, NDCG@10, coverage, intra-list diversity, ALS rate, and fallback
-rate. No corrected aggregate quality table is promoted as a resume result:
+`recall_at_k`, `ndcg_at_k`, coverage, intra-list diversity, ALS rate, and
+fallback rate. `recall_at_k` is hits divided by `k`; `ndcg_at_k` is discounted
+gain without ideal-score normalization. No corrected aggregate quality table
+is promoted as a resume result:
 the available click mirror and generated session IDs do not support a
 credible joined click/purchase comparison.
 
@@ -114,7 +120,8 @@ capacity.
 
 A fresh rerun on the restored checkout, after one excluded readiness request,
 measured p50 `42.63 ms` and p99 `59.38 ms` for the same 20 requests and
-concurrency. The resume claim's `33.6 ms / 44.7 ms` is not present in the
+concurrency. The benchmark's p99 calculation selects the maximum observation
+for 20 requests. The resume claim's `33.6 ms / 44.7 ms` is not present in the
 restored benchmark outputs and was not reproduced in this rerun.
 
 ## Tests
@@ -140,9 +147,12 @@ unseen-session fallback, MMR similarity selection, and empty candidates.
 - The original host repository had 92 passing and 104 skipped tests at
   extraction; the standalone project suite contains the 3 focused tests above.
 - The training AUC is in-sample and must not be presented as generalization.
-- The holdout is chronological within each session: train prefix, validation
-  penultimate event, test final event. It is not a global timestamp-period
-  split; cross-session long-term evolution remains unverified.
+- The split holds the final sorted row per session and the penultimate row for
+  validation, but day-level click timestamps and item-ID tie breaking mean it
+  is not a faithful within-session chronology. The strict earlier-than history
+  filter also leaves day-stamped click sessions with empty history. This is
+  not a global timestamp-period split; cross-session long-term evolution
+  remains unverified.
 - Spark local execution used a 20000-row input limit per mirror (up to 40000
   click/buy rows); this proves Spark code execution, not full-input or
   billion-scale performance.
@@ -169,9 +179,9 @@ unseen-session fallback, MMR similarity selection, and empty candidates.
 - Built a shared-trunk, two-head PyTorch scorer with prefix-only features and
   sampled-unobserved click labels; purchase evaluation remains gated on a
   valid joined source.
-- Added chronological final-event session evaluation, MMR co-occurrence
-  diversity, MLflow lambda runs, and regression tests for leakage and
-  cold-start behavior.
+- Added a per-session final-row holdout, MMR co-occurrence diversity, MLflow
+  lambda runs, and regression tests for leakage and cold-start behavior. The
+  click mirror does not preserve original within-session chronology.
 - Served ALS and fallback recommendations through FastAPI; measured
   `42.63 ms` p50 and `59.38 ms` p99 in a fresh local 20-request benchmark
   after one excluded readiness request.

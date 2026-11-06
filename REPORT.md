@@ -84,7 +84,7 @@ of which 1020250 have a non-null ALS score. The corrected model produced
 49999 training examples;
 its click AUC was `0.9391278123124925` and click logloss was
 `0.6534747741152953`. These are training-set diagnostics, not held-out model
-quality, and are not resume claims. `buy_auc=0.0` because no joined purchase
+quality. `buy_auc=0.0` because no joined purchase
 positive exists.
 
 Validation, 500 sessions, lambda `0.75`: Recall@10 `0.005`, NDCG@10
@@ -101,7 +101,7 @@ The corrected evaluator writes an MLflow run per lambda and reports
 `recall_at_k`, `ndcg_at_k`, coverage, intra-list diversity, ALS rate, and
 fallback rate. `recall_at_k` is hits divided by `k`; `ndcg_at_k` is discounted
 gain without ideal-score normalization. No corrected aggregate quality table
-is promoted as a resume result:
+is reported because
 the available click mirror and generated session IDs do not support a
 credible joined click/purchase comparison.
 
@@ -121,7 +121,7 @@ capacity.
 A fresh rerun on the restored checkout, after one excluded readiness request,
 measured p50 `42.63 ms` and p99 `59.38 ms` for the same 20 requests and
 concurrency. The benchmark's p99 calculation selects the maximum observation
-for 20 requests. The resume claim's `33.6 ms / 44.7 ms` is not present in the
+for 20 requests. The previously reported `33.6 ms / 44.7 ms` is not present in the
 restored benchmark outputs and was not reproduced in this rerun.
 
 ## Tests
@@ -159,29 +159,3 @@ unseen-session fallback, MMR similarity selection, and empty candidates.
 - No BigQuery credentials were available, so BigQuery load was not executed.
 - No persistent user identity, online A/B test, retention/dwell label, or
   causal long-term evaluation exists.
-
-## Resume audit
-
-| claim | status |
-|---|---|
-| Spark ALS recommendation | verified under the measured 20000-row run; coverage is conditional |
-| Popularity baseline | verified as cold-start fallback |
-| multi-task click/purchase prediction | architecture verified; purchase result unsupported with current data join |
-| temporal holdout | verified as final-event-per-session holdout |
-| MMR trade-off | implementation verified; corrected aggregate result not promoted |
-| former AUC/logloss values | unsupported; withdrawn |
-| p50/p99 latency | verified only for the stated 20-request local unseen-session benchmark |
-
-## Truthful resume bullets
-
-- Implemented a PySpark `ALS` plus popularity candidate pipeline for Yoochoose
-  sessions, preserving ALS scores and adding explicit unseen-session fallback.
-- Built a shared-trunk, two-head PyTorch scorer with prefix-only features and
-  sampled-unobserved click labels; purchase evaluation remains gated on a
-  valid joined source.
-- Added a per-session final-row holdout, MMR co-occurrence diversity, MLflow
-  lambda runs, and regression tests for leakage and cold-start behavior. The
-  click mirror does not preserve original within-session chronology.
-- Served ALS and fallback recommendations through FastAPI; measured
-  `42.63 ms` p50 and `59.38 ms` p99 in a fresh local 20-request benchmark
-  after one excluded readiness request.
